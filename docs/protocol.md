@@ -12,7 +12,7 @@ All paths below are relative to `/api`. Except for health, registration and logi
 | POST | `/auth/logout` | Session + CSRF token; revokes session and clears cookie |
 | GET | `/admin/users` | Administrator only; account IDs, usernames and roles |
 
-Registration and login return `{"user":{"id":"…","username":"…","role":"user"},"csrf_token":"…"}`. The role may be `admin` when an administrator signs in, but a registration request cannot select a role. Usernames contain 3–32 ASCII letters, digits, underscores or hyphens and are normalized to lowercase. Passwords must have 10–128 characters; their leading and trailing spaces are significant.
+Registration and login return `{"user":{"id":"…","username":"…","role":"user"},"csrf_token":"…"}`. The role may be `admin` when an administrator signs in, but a registration request cannot select a role. Usernames contain 3–32 ASCII letters, digits, underscores or hyphens and are normalized to lowercase. New passwords must have 5–20 characters; their leading and trailing spaces are significant. Login still accepts existing passwords created under the previous policy.
 
 After login, send `X-CSRF-Token` with every authenticated POST. Use `/auth/me` to retrieve the token again after a page reload. Browser requests use `credentials: "include"`; the frontend keeps the CSRF token in memory. Login/registration must have `Content-Type: application/json`. Supplied Origin headers must exactly match `AUCTION_ALLOWED_ORIGINS`; WebSocket upgrades use the same allowlist. There is no cross-origin CORS grant.
 

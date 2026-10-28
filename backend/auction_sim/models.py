@@ -128,7 +128,12 @@ class Credentials(BaseModel):
     # Passwords must not inherit StrictModel's whitespace stripping.
     model_config = ConfigDict(extra="forbid")
     username: str = Field(min_length=3, max_length=32, pattern=r"^[a-zA-Z0-9_-]+$")
-    password: str = Field(min_length=10, max_length=128)
+    # Login continues to accept passwords created under the previous policy.
+    password: str = Field(min_length=1, max_length=128)
+
+
+class RegistrationCredentials(Credentials):
+    password: str = Field(min_length=5, max_length=20)
 
 
 class UserView(StrictModel):

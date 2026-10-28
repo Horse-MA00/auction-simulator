@@ -27,6 +27,7 @@ from .models import (
     AuthResponse,
     Credentials,
     EventsResponse,
+    RegistrationCredentials,
     RunConfig,
     RunsResponse,
     RunView,
@@ -172,7 +173,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         response_model=AuthResponse,
         dependencies=[Depends(login_request)],
     )
-    def register(credentials: Credentials, request: Request, response: Response):
+    def register(credentials: RegistrationCredentials, request: Request, response: Response):
         auth.register(
             credentials.username,
             credentials.password,

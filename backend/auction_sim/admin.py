@@ -26,7 +26,7 @@ def main():
         store.initialize()
         auth = AuthService(store)
         if args.command == "create":
-            password = getpass.getpass("Admin password (10–128 characters): ")
+            password = getpass.getpass("Admin password (5–20 characters): ")
             confirmation = getpass.getpass("Repeat password: ")
             if password != confirmation:
                 parser.error("Passwords do not match")

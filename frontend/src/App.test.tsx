@@ -259,14 +259,14 @@ describe('account sessions', () => {
     render(<App />);
     await userEvent.click(await screen.findByRole('button', { name: 'Create an account' }));
     await userEvent.type(screen.getByRole('textbox', { name: 'Username' }), 'alice');
-    await userEvent.type(screen.getByLabelText('Password'), 'a-long-password');
+    await userEvent.type(screen.getByLabelText('Password'), 'short');
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
     expect(await screen.findByText('No assigned auctions yet')).toBeInTheDocument();
     expect(screen.getByText('Participant')).toBeInTheDocument();
     const call = fetchMock.mock.calls.find(([url]) => url === '/api/auth/register');
     expect(JSON.parse(call?.[1]?.body as string)).toEqual({
       username: 'alice',
-      password: 'a-long-password',
+      password: 'short',
     });
   });
 

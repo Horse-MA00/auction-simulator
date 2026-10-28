@@ -104,14 +104,14 @@ export default function AuthScreen({
               onChange={(e) => setPassword(e.target.value)}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               required
-              minLength={mode === 'register' ? 10 : 1}
-              maxLength={128}
+              minLength={mode === 'register' ? 5 : 1}
+              maxLength={mode === 'register' ? 20 : 128}
               disabled={busy}
             />
           </label>
           {mode === 'register' && (
             <p className="field-note">
-              Use at least 10 characters. New accounts are regular users; administrator access is
+              Use 5–20 characters. New accounts are regular users; administrator access is
               configured separately.
             </p>
           )}

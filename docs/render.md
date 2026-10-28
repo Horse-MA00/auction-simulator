@@ -39,7 +39,7 @@ Render 會先建立 PostgreSQL，然後按 Dockerfile build 並啟動網站。�
 python -m backend.auction_sim.admin create admin
 ```
 
-按提示輸入兩次自訂密碼（10–128 字元；輸入時不顯示）。不要把密碼放在 command arguments、GitHub 或本文件。
+按提示輸入兩次自訂密碼（5–20 字元；輸入時不顯示）。不要把密碼放在 command arguments、GitHub 或本文件。
 
 完成後，用 `admin` 和剛設定的密碼在網站登入。其他人可透過網站註冊；admin 建立拍賣時，再於 bidder 的 **Assigned account** 選單指派帳戶。出價仍由目前的 80% scripted strategy 執行。
 

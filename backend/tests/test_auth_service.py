@@ -15,7 +15,7 @@ from backend.auction_sim.auth import (
 )
 from backend.auction_sim.storage import Store
 
-PASSWORD = "test-password-for-service"
+PASSWORD = "test-password-42"
 
 
 @pytest.fixture
@@ -117,7 +117,7 @@ def test_rate_limit_survives_service_restart(auth):
 
 @pytest.mark.parametrize(
     "username,password",
-    [("ab", PASSWORD), ("a/b", PASSWORD), ("alice", "short"), ("alice", "a" * 129)],
+    [("ab", PASSWORD), ("a/b", PASSWORD), ("alice", "tiny"), ("alice", "a" * 21)],
 )
 def test_registration_rejects_invalid_input(auth, username, password):
     with pytest.raises(AuthError):

@@ -19,7 +19,7 @@ from backend.auction_sim.models import RunConfig
 from backend.auction_sim.receiver import Receiver
 from backend.auction_sim.storage import Store
 
-PASSWORD = "Postgres-Test-Password-42!"
+PASSWORD = "Postgres-Test-42!"
 
 
 @pytest.fixture

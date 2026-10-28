@@ -49,8 +49,8 @@ def normalize_username(username: str) -> str:
 
 
 def validate_password(password: str):
-    if not 10 <= len(password) <= 128:
-        raise AuthError("Password must contain 10–128 characters")
+    if not 5 <= len(password) <= 20:
+        raise AuthError("Password must contain 5–20 characters")
 
 
 def token_hash(token: str) -> str:
@@ -122,7 +122,8 @@ class AuthService:
         self._limit("login-source", remote_key, limit=30, window=300)
         username = normalize_username(username)
         self._limit("login-user", username, limit=10, window=300)
-        if not 10 <= len(password) <= 128:
+        # Verify existing hashes even if their passwords predate the current creation policy.
+        if not 1 <= len(password) <= 128:
             raise InvalidCredentials("Invalid username or password")
         with self.store.reader() as conn:
             row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()

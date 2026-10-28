@@ -25,7 +25,7 @@
 | 結算、事件、重播及匯出 | 完整資料 | 依相同權限過濾 |
 | 建立管理員 | 本機 CLI | 不可以自行升級 |
 
-公開註冊一律建立 `user`，即使它是第一個帳戶。Username 為 3–32 個英文字母、數字、`_` 或 `-`，儲存時轉成小寫；密碼為 10–128 字元，前後空白會保留。密碼使用 Argon2id 雜湊，登入使用有效期 12 小時的 HttpOnly、SameSite=Strict cookie；伺服器只儲存 session token 的雜湊。登出會撤銷 session。
+公開註冊一律建立 `user`，即使它是第一個帳戶。Username 為 3–32 個英文字母、數字、`_` 或 `-`，儲存時轉成小寫；新設密碼為 5–20 字元，前後空白會保留。密碼使用 Argon2id 雜湊，登入使用有效期 12 小時的 HttpOnly、SameSite=Strict cookie；伺服器只儲存 session token 的雜湊。登出會撤銷 session。
 
 ## 拍賣規則與策略
 
