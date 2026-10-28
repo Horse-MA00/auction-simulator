@@ -6,6 +6,8 @@ services:
     environment:
       AUCTION_DB_PATH: /app/data/auction.sqlite3
       AUCTION_FRONTEND_DIR: /app/frontend/dist
+      AUCTION_COOKIE_SECURE: ${AUCTION_COOKIE_SECURE:-false}
+      AUCTION_ALLOWED_ORIGINS: ${AUCTION_ALLOWED_ORIGINS:-http://127.0.0.1:8000,http://localhost:8000}
     volumes:
       - auction-data:/app/data
     restart: unless-stopped

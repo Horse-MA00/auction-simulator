@@ -14,6 +14,13 @@ from backend.auction_sim.models import RunConfig
 @pytest.fixture
 def client(tmp_path):
     with TestClient(create_app(tmp_path / "receiver.sqlite3")) as client:
+        client.app.state.auth.create_admin("receiver-admin", "Correct-Horse-42!")
+        login = client.post(
+            "/api/auth/login",
+            json={"username": "receiver-admin", "password": "Correct-Horse-42!"},
+        )
+        assert login.status_code == 200
+        client.headers["X-CSRF-Token"] = login.json()["csrf_token"]
         yield client
 
 
@@ -156,14 +163,14 @@ def test_failed_event_write_rolls_back_snapshot(receiver, run, monkeypatch):
     assert len(receiver.events(run["id"])) == 1
 
 
-def test_websocket_reconnect_cursor_and_secrecy(client, receiver, run):
+def test_admin_websocket_reconnect_cursor_and_audit(client, receiver, run):
     receiver.advance(run["id"])
     receiver.advance(run["id"])
     with client.websocket_connect(f"/api/runs/{run['id']}/ws?after=2") as ws:
         packet = ws.receive_json()
         assert packet["type"] == "events"
         assert [event["seq"] for event in packet["events"]] == [3]
-        assert packet["events"][0]["payload"] == {"bidder_id": "alice", "redacted": True}
+        assert packet["events"][0]["payload"] == {"bidder_id": "alice", "amount": 80}
         receiver.advance(run["id"])
         packet = ws.receive_json()
         assert packet["events"][0]["seq"] == 4

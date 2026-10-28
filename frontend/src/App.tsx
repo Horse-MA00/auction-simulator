@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { credits, humanize, request } from './api';
-import type { AuctionEvent, Bidder, Run, RunConfig, RunSummary } from './api';
+import { ApiError, credits, humanize, request, SESSION_EXPIRED, setCsrfToken } from './api';
+import type { AuctionEvent, Bidder, Run, RunConfig, RunSummary, Session, User } from './api';
+import AuthScreen from './AuthScreen';
 
 const defaults: RunConfig = {
   item_name: 'GPU time allocation',
@@ -22,13 +23,27 @@ const statusLabel: Record<Run['status'], string> = {
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : 'Something went wrong. Please try again.';
 
-function Setup({ onCreate, busy }: { onCreate: (config: RunConfig) => void; busy: boolean }) {
+function Setup({
+  onCreate,
+  busy,
+  users,
+}: {
+  onCreate: (config: RunConfig) => void;
+  busy: boolean;
+  users: User[];
+}) {
   const [config, setConfig] = useState<RunConfig>(defaults);
   const updateBidder = (index: number, key: keyof Bidder, value: string) =>
     setConfig((old) => ({
       ...old,
       bidders: old.bidders.map((bidder, i) =>
-        i === index ? { ...bidder, [key]: key === 'name' ? value : Number(value) } : bidder,
+        i === index
+          ? {
+              ...bidder,
+              [key]:
+                key === 'name' ? value : key === 'owner_user_id' ? value || null : Number(value),
+            }
+          : bidder,
       ),
     }));
   function submit(event: FormEvent) {
@@ -127,6 +142,23 @@ function Setup({ onCreate, busy }: { onCreate: (config: RunConfig) => void; busy
             >
               ×
             </button>
+            <label className="owner-select">
+              <span className="input-label">Assigned account</span>
+              <select
+                aria-label={`Bidder ${index + 1} account`}
+                value={bidder.owner_user_id ?? ''}
+                disabled={busy}
+                onChange={(e) => updateBidder(index, 'owner_user_id', e.target.value)}
+              >
+                <option value="">Unassigned · administrator only</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.username}
+                    {user.role === 'admin' ? ' (admin)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
           </fieldset>
         ))}
       </div>
@@ -156,7 +188,7 @@ function Setup({ onCreate, busy }: { onCreate: (config: RunConfig) => void; busy
   );
 }
 
-function Metrics({ run }: { run: Run }) {
+function Metrics({ run, isAdmin }: { run: Run; isAdmin: boolean }) {
   const winner = run.bidders.find((b) => b.id === run.results?.winner_id);
   const winnerOutcome = run.results?.outcomes.find((outcome) => outcome.won);
   return (
@@ -168,7 +200,7 @@ function Metrics({ run }: { run: Run }) {
             ? (winner?.name ?? 'No sale')
             : `${run.responded.length} / ${run.bidders.length}`}
         </strong>
-        <small>{run.results ? 'Highest eligible bid' : 'Sealed until settlement'}</small>
+        <small>{run.results ? 'Highest eligible bid' : 'Awaiting all bidder responses'}</small>
       </div>
       <div>
         <span className="metric-label">Seller revenue</span>
@@ -179,18 +211,26 @@ function Metrics({ run }: { run: Run }) {
         <small>Winner pays their own bid</small>
       </div>
       <div>
-        <span className="metric-label">Winner surplus</span>
+        <span className="metric-label">{isAdmin ? 'Winner surplus' : 'Your surplus'}</span>
         <strong>
-          {winnerOutcome ? credits(winnerOutcome.utility) : run.results ? '0' : '—'}
+          {isAdmin
+            ? winnerOutcome
+              ? credits(winnerOutcome.utility)
+              : run.results
+                ? '0'
+                : '—'
+            : run.results
+              ? credits(run.results.outcomes.reduce((sum, outcome) => sum + outcome.utility, 0))
+              : '—'}
           <em>credits</em>
         </strong>
-        <small>Valuation less payment</small>
+        <small>{isAdmin ? 'Valuation less payment' : 'Total for your assigned bidders'}</small>
       </div>
     </div>
   );
 }
 
-function BidderResults({ run }: { run: Run }) {
+function BidderResults({ run, user }: { run: Run; user: User }) {
   return (
     <div className="table-scroll">
       <table className="results-table">
@@ -207,33 +247,56 @@ function BidderResults({ run }: { run: Run }) {
         <tbody>
           {run.bidders.map((bidder, index) => {
             const result = run.results?.outcomes.find((outcome) => outcome.bidder_id === bidder.id);
+            const canRead = user.role === 'admin' || bidder.owner_user_id === user.id;
+            const submitted = run.bids?.[bidder.id];
             return (
               <tr key={bidder.id} className={result?.won ? 'winner-row' : ''}>
                 <td>
                   <span className="bidder-name">
                     <span className="avatar small">{String(index + 1).padStart(2, '0')}</span>
                     {bidder.name}
+                    {bidder.owner_user_id === user.id && (
+                      <span className="winner-label">YOURS</span>
+                    )}
                     {result?.won && <span className="winner-label">WINNER</span>}
                   </span>
                 </td>
                 <td>{credits(bidder.valuation)}</td>
                 <td>{credits(bidder.budget)}</td>
                 <td>
-                  {result ? (
+                  {!canRead ? (
+                    <span className="sealed">Private</span>
+                  ) : result ? (
                     result.bid === null ? (
                       <span className="muted">Abstained</span>
                     ) : (
                       credits(result.bid)
                     )
+                  ) : submitted !== undefined ? (
+                    credits(submitted)
                   ) : (
                     <span className="sealed">
-                      {run.responded.includes(bidder.id) ? 'Sealed' : 'Waiting'}
+                      {run.responded.includes(bidder.id) ? 'Abstained' : 'Waiting'}
                     </span>
                   )}
                 </td>
-                <td>{result ? credits(result.payment) : '—'}</td>
+                <td>
+                  {!canRead ? (
+                    <span className="sealed">Private</span>
+                  ) : result ? (
+                    credits(result.payment)
+                  ) : (
+                    '—'
+                  )}
+                </td>
                 <td className={result && result.utility > 0 ? 'positive' : ''}>
-                  {result ? credits(result.utility) : '—'}
+                  {!canRead ? (
+                    <span className="sealed">Private</span>
+                  ) : result ? (
+                    credits(result.utility)
+                  ) : (
+                    '—'
+                  )}
                 </td>
               </tr>
             );
@@ -248,8 +311,8 @@ function describeEvent(event: AuctionEvent): string {
   const payload = event.payload;
   if (typeof payload.reason === 'string') return payload.reason;
   if (typeof payload.message === 'string') return payload.message;
-  if (event.visibility === 'private')
-    return 'Private bidder message recorded. Bid details remain sealed.';
+  if (event.payload.redacted === true)
+    return 'Private bidder message recorded. Details are not visible to this account.';
   const fields = Object.entries(payload)
     .filter(([key]) => !['bidders', 'results', 'outcomes', 'config'].includes(key))
     .slice(0, 3);
@@ -264,6 +327,91 @@ function describeEvent(event: AuctionEvent): string {
 }
 
 export default function App() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState('');
+  const [logoutBusy, setLogoutBusy] = useState(false);
+  const authenticate = useCallback((next: Session) => {
+    setCsrfToken(next.csrf_token);
+    setSession(next);
+    setNotice('');
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    request<Session>('/auth/me')
+      .then((next) => {
+        if (active) authenticate(next);
+      })
+      .catch((cause) => {
+        if (active && !(cause instanceof ApiError && cause.status === 401))
+          setNotice(`Cannot reach the backend. ${errorText(cause)}`);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    const expired = () => {
+      setCsrfToken('');
+      setSession(null);
+      setNotice('Your session has expired. Please sign in again.');
+    };
+    window.addEventListener(SESSION_EXPIRED, expired);
+    return () => {
+      active = false;
+      window.removeEventListener(SESSION_EXPIRED, expired);
+      setCsrfToken('');
+    };
+  }, [authenticate]);
+
+  async function logout() {
+    setLogoutBusy(true);
+    try {
+      await request<{ ok: boolean }>('/auth/logout', { method: 'POST' });
+      setCsrfToken('');
+      setSession(null);
+      setNotice('');
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 401) {
+        setCsrfToken('');
+        setSession(null);
+        setNotice('');
+      } else setNotice(`Sign-out failed. ${errorText(cause)}`);
+    } finally {
+      setLogoutBusy(false);
+    }
+  }
+
+  if (loading)
+    return (
+      <div className="session-loading" role="status">
+        Loading your workspace…
+      </div>
+    );
+  if (!session) return <AuthScreen onAuthenticated={authenticate} notice={notice} />;
+  return (
+    <Workbench
+      key={session.user.id}
+      session={session}
+      onLogout={() => void logout()}
+      logoutBusy={logoutBusy}
+      sessionNotice={notice}
+    />
+  );
+}
+
+function Workbench({
+  session,
+  onLogout,
+  logoutBusy,
+  sessionNotice,
+}: {
+  session: Session;
+  onLogout: () => void;
+  logoutBusy: boolean;
+  sessionNotice: string;
+}) {
+  const isAdmin = session.user.role === 'admin';
+  const [users, setUsers] = useState<User[]>([]);
   const [run, setRun] = useState<Run | null>(null);
   const [history, setHistory] = useState<RunSummary[]>([]);
   const [events, setEvents] = useState<AuctionEvent[]>([]);
@@ -276,14 +424,42 @@ export default function App() {
   const [replayLoading, setReplayLoading] = useState(false);
   const activeId = useRef<string | null>(null);
   const replayRequest = useRef(0);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      activeId.current = null;
+      ++replayRequest.current;
+    };
+  }, []);
 
   const refreshHistory = useCallback(async () => {
     const response = await request<{ runs: RunSummary[] }>('/runs');
-    setHistory(response.runs);
+    if (mounted.current) setHistory(response.runs);
   }, []);
   useEffect(() => {
     refreshHistory().catch((e) => setError(`Cannot reach the backend. ${errorText(e)}`));
-  }, [refreshHistory]);
+    if (isAdmin)
+      request<{ users: User[] }>('/admin/users')
+        .then((response) => {
+          if (mounted.current) setUsers(response.users);
+        })
+        .catch((cause) => setError(errorText(cause)));
+  }, [refreshHistory, isAdmin]);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      void refreshHistory().catch(() => {});
+      if (isAdmin)
+        void request<{ users: User[] }>('/admin/users')
+          .then((response) => {
+            if (mounted.current) setUsers(response.users);
+          })
+          .catch(() => {});
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [refreshHistory, isAdmin]);
 
   const refresh = useCallback(async (id: string) => {
     const [next, log] = await Promise.all([
@@ -351,11 +527,13 @@ export default function App() {
   }, [runId, refresh]);
 
   async function create(config: RunConfig) {
+    if (!isAdmin) return;
     setBusy(true);
     setError('');
     setPlaying(false);
     try {
       const next = await request<Run>('/runs', { method: 'POST', body: JSON.stringify(config) });
+      if (!mounted.current) return;
       activeId.current = next.id;
       setRun(next);
       setEvents([]);
@@ -393,7 +571,7 @@ export default function App() {
 
   const advance = useCallback(async () => {
     const id = activeId.current;
-    if (!id) return;
+    if (!id || !isAdmin) return;
     setBusy(true);
     setError('');
     try {
@@ -408,7 +586,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [refresh]);
+  }, [refresh, isAdmin]);
 
   useEffect(() => {
     if (!playing || busy || !run || run.status === 'settled' || replayThrough !== null) return;
@@ -461,33 +639,37 @@ export default function App() {
             <small>HAN2601 / RESEARCH SIMULATOR</small>
           </span>
         </a>
-        <div className="sidebar-section">
-          <span className="eyebrow">WORKSPACE</span>
-          <button
-            className="nav-active"
-            onClick={() => {
-              setPlaying(false);
-              setReplay(null);
-              setReplayThrough(null);
-              setReplayLoading(false);
-              setRun(null);
-              setEvents([]);
-              activeId.current = null;
-              ++replayRequest.current;
-            }}
-            disabled={busy}
-          >
-            <span>＋</span> New experiment
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="sidebar-section">
+            <span className="eyebrow">WORKSPACE</span>
+            <button
+              className="nav-active"
+              onClick={() => {
+                setPlaying(false);
+                setReplay(null);
+                setReplayThrough(null);
+                setReplayLoading(false);
+                setRun(null);
+                setEvents([]);
+                activeId.current = null;
+                ++replayRequest.current;
+              }}
+              disabled={busy}
+            >
+              <span>＋</span> New experiment
+            </button>
+          </div>
+        )}
         <div className="history-heading">
-          <span className="eyebrow">SAVED RUNS</span>
+          <span className="eyebrow">{isAdmin ? 'ALL AUCTION RUNS' : 'YOUR AUCTION RUNS'}</span>
           <span className="history-count">{history.length}</span>
         </div>
         <nav className="history" aria-label="Saved auction runs">
           {history.length === 0 ? (
             <p className="history-empty">
-              Your experiments will appear here. Every run is saved locally.
+              {isAdmin
+                ? 'Your experiments will appear here. Every run is saved locally.'
+                : 'Assigned auctions will appear here.'}
             </p>
           ) : (
             history.map((item) => (
@@ -528,11 +710,21 @@ export default function App() {
           <div>
             <div className="eyebrow">EXPERIMENT WORKBENCH</div>
             <h1>Watch a strategy become an outcome.</h1>
-            <p>Configure an auction. Follow each message. Reproduce the result.</p>
+            <p>
+              {isAdmin
+                ? 'Configure an auction. Follow each message. Reproduce the result.'
+                : 'Follow your assigned bidders and inspect your results.'}
+            </p>
           </div>
-          <span className="local-badge">
-            <span /> Local research environment
-          </span>
+          <div className="account-menu">
+            <span className="account-name">
+              {session.user.username}
+              <small>{isAdmin ? 'Administrator' : 'Participant'}</small>
+            </span>
+            <button className="button secondary" disabled={logoutBusy || busy} onClick={onLogout}>
+              {logoutBusy ? 'Signing out…' : 'Sign out'}
+            </button>
+          </div>
         </header>
         <div className="mechanism-strip">
           <span>
@@ -542,18 +734,28 @@ export default function App() {
           <span>Fixed 80% strategy</span>
           <span className="muted">No LLM calls</span>
         </div>
-        {error && (
+        {(error || sessionNotice) && (
           <div className="error-banner" role="alert">
-            <span>{error}</span>
+            <span>{error || sessionNotice}</span>
             <button className="text-button" onClick={() => setError('')}>
               Dismiss
             </button>
           </div>
         )}
 
-        {!run ? (
+        {!run && !isAdmin ? (
+          <section className="panel participant-empty">
+            <span className="eyebrow">YOUR WORKSPACE</span>
+            <h2>{history.length ? 'Choose an assigned auction' : 'No assigned auctions yet'}</h2>
+            <p>
+              {history.length
+                ? 'Select an auction from the sidebar to follow your scripted bidders. Only your private bids and results are visible to your account.'
+                : 'Ask your administrator to assign a bidder to your account. Assigned auctions will appear automatically.'}
+            </p>
+          </section>
+        ) : !run ? (
           <div className="setup-layout">
-            <Setup onCreate={(config) => void create(config)} busy={busy} />
+            <Setup onCreate={(config) => void create(config)} busy={busy} users={users} />
             <aside className="guide">
               <span className="eyebrow">HOW THIS RUN WORKS</span>
               <h2>
@@ -610,8 +812,8 @@ export default function App() {
               </div>
               {shown && (
                 <>
-                  <Metrics run={shown} />
-                  <BidderResults run={shown} />
+                  <Metrics run={shown} isAdmin={isAdmin} />
+                  <BidderResults run={shown} user={session.user} />
                 </>
               )}
               {replayLoading && (
@@ -620,8 +822,9 @@ export default function App() {
                 </p>
               )}
               <p className="observer-note">
-                Researcher view: valuations and budgets are experiment inputs. Bidders receive only
-                their own private values; bid amounts stay sealed until settlement.
+                {isAdmin
+                  ? 'Administrator view: all submitted bids, valuations, budgets and results are visible. Scripted bidders still receive only their own private information.'
+                  : 'Participant view: only your assigned bidders’ private values, bids and results are visible. Other bidders’ amounts remain private, including after settlement.'}
               </p>
               <div className="run-actions">
                 <div className="stream-label">
@@ -632,24 +835,28 @@ export default function App() {
                       ? 'Refreshing via REST · reconnecting'
                       : 'Connecting event stream…'}
                 </div>
-                <div className="button-group">
-                  <button
-                    className="button secondary"
-                    disabled={busy || playing || run.status === 'settled' || replayThrough !== null}
-                    onClick={() => void advance()}
-                  >
-                    Step once →
-                  </button>
-                  <button
-                    className="button primary"
-                    disabled={
-                      run.status === 'settled' || replayThrough !== null || (busy && !playing)
-                    }
-                    onClick={() => setPlaying((value) => !value)}
-                  >
-                    {playing ? 'Ⅱ Pause' : '▶ Auto-play'}
-                  </button>
-                </div>
+                {isAdmin && (
+                  <div className="button-group">
+                    <button
+                      className="button secondary"
+                      disabled={
+                        busy || playing || run.status === 'settled' || replayThrough !== null
+                      }
+                      onClick={() => void advance()}
+                    >
+                      Step once →
+                    </button>
+                    <button
+                      className="button primary"
+                      disabled={
+                        run.status === 'settled' || replayThrough !== null || (busy && !playing)
+                      }
+                      onClick={() => setPlaying((value) => !value)}
+                    >
+                      {playing ? 'Ⅱ Pause' : '▶ Auto-play'}
+                    </button>
+                  </div>
+                )}
               </div>
             </section>
 

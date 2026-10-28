@@ -16,6 +16,7 @@ class BidderConfig(StrictModel):
     name: str = Field(min_length=1, max_length=60)
     valuation: Annotated[int, Field(strict=True, ge=1, le=1_000_000_000)]
     budget: Credits
+    owner_user_id: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class RunConfig(StrictModel):
@@ -72,13 +73,32 @@ class Settlement(StrictModel):
     outcomes: list[Outcome]
 
 
-class RunView(RunConfig):
+class BidderView(StrictModel):
+    id: str
+    name: str
+    valuation: Credits | None
+    budget: Credits | None
+    owner_user_id: str | None = None
+
+
+class SettlementView(StrictModel):
+    winner_id: str | None
+    winning_bid: Credits | None
+    revenue: Credits | None
+    outcomes: list[Outcome]
+
+
+class RunView(StrictModel):
+    item_name: str
+    reserve_price: Credits
+    mechanism: Literal["first_price_sealed_bid"]
+    bidders: list[BidderView]
     id: str
     status: Literal["created", "collecting", "closed", "settled"]
     round: int
     responded: list[str]
     bids: dict[str, int] | None
-    results: Settlement | None
+    results: SettlementView | None
     created_at: str
     updated_at: str
     event_count: int
@@ -102,3 +122,25 @@ class Event(StrictModel):
 
 class EventsResponse(StrictModel):
     events: list[Event]
+
+
+class Credentials(BaseModel):
+    # Passwords must not inherit StrictModel's whitespace stripping.
+    model_config = ConfigDict(extra="forbid")
+    username: str = Field(min_length=3, max_length=32, pattern=r"^[a-zA-Z0-9_-]+$")
+    password: str = Field(min_length=10, max_length=128)
+
+
+class UserView(StrictModel):
+    id: str
+    username: str
+    role: Literal["admin", "user"]
+
+
+class AuthResponse(StrictModel):
+    user: UserView
+    csrf_token: str
+
+
+class UsersResponse(StrictModel):
+    users: list[UserView]

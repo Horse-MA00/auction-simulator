@@ -5,11 +5,11 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
+from .access import account_event, account_view, can_access, require_access, require_admin
 from .agents import FixedFractionBidder, ScriptedAuctioneer, observe
 from .engine import (
     InvalidAction,
     next_actor,
-    public_event,
     public_view,
     reduce_event,
     validate_action,
@@ -24,7 +24,8 @@ class Receiver:
         self.bidder = FixedFractionBidder()
         self.auctioneer = ScriptedAuctioneer()
 
-    def create(self, config: RunConfig) -> dict:
+    def create(self, config: RunConfig, viewer: dict | None = None) -> dict:
+        require_admin(viewer)
         run_id = str(uuid4())
         with self.store.transaction() as conn:
             conn.execute(
@@ -42,16 +43,23 @@ class Receiver:
                     "session_id": run_id,
                 },
             )
-            return public_view(state)
+            return account_view(state, viewer)
 
-    def get(self, run_id: str) -> dict:
+    def get(self, run_id: str, viewer: dict | None = None) -> dict:
         with self.store.reader() as conn:
-            return public_view(self.store.state(conn, run_id))
+            return account_view(self.store.state(conn, run_id), viewer)
 
-    def list_runs(self) -> list[dict]:
+    def list_runs(self, viewer: dict | None = None) -> list[dict]:
         with self.store.reader() as conn:
-            rows = conn.execute("SELECT state FROM runs ORDER BY created_at DESC LIMIT 100")
-            return [public_view(json.loads(row["state"])) for row in rows]
+            rows = conn.execute("SELECT state FROM runs ORDER BY created_at DESC")
+            visible = []
+            for row in rows:
+                state = json.loads(row["state"])
+                if can_access(state, viewer):
+                    visible.append(account_view(state, viewer))
+                    if len(visible) == 100:
+                        break
+            return visible
 
     def _receive(self, conn, run_id: str, raw: dict, actor: str) -> dict:
         state = self.store.state(conn, run_id)
@@ -118,51 +126,58 @@ class Receiver:
         with self.store.transaction() as conn:
             return self._receive(conn, run_id, raw, actor)
 
-    def advance(self, run_id: str) -> dict:
+    def advance(self, run_id: str, viewer: dict | None = None) -> dict:
+        require_admin(viewer)
         # Choosing the actor, processing its message and updating the log are atomic.
         with self.store.transaction() as conn:
             state = self.store.state(conn, run_id)
             actor = next_actor(state)
             if actor is None:
-                return public_view(state)
+                return account_view(state, viewer)
             agent = self.auctioneer if actor == "auctioneer" else self.bidder
             message = agent.act(observe(state, actor))
             receipt = self._receive(conn, run_id, message.model_dump(), actor)
             if not receipt["accepted"]:
                 raise RuntimeError(f"Built-in agent returned an invalid action: {receipt['error']}")
-            return receipt["state"]
+            return account_view(self.store.state(conn, run_id), viewer)
 
-    def execute(self, run_id: str) -> dict:
+    def execute(self, run_id: str, viewer: dict | None = None) -> dict:
         # Max bidders 20 + open, close, settle. Each step is durably committed for WS/restart.
         for _ in range(24):
-            state = self.advance(run_id)
+            state = self.advance(run_id, viewer)
             if state["status"] == "settled":
                 return state
         raise RuntimeError("Run exceeded the v0 step bound")
 
-    def events(self, run_id: str, after: int = 0) -> list[dict]:
+    def events(self, run_id: str, after: int = 0, viewer: dict | None = None) -> list[dict]:
         with self.store.reader() as conn:
-            self.store.state(conn, run_id)
-            return [public_event(e) for e in self.store.events(conn, run_id, after)]
+            state = self.store.state(conn, run_id)
+            require_access(state, viewer)
+            return [account_event(e, state, viewer) for e in self.store.events(conn, run_id, after)]
 
-    def replay(self, run_id: str, through: int | None = None) -> dict:
+    def replay(self, run_id: str, through: int | None = None, viewer: dict | None = None) -> dict:
         with self.store.reader() as conn:
             current = self.store.state(conn, run_id)
+            require_access(current, viewer)
             if through is not None and not 1 <= through <= current["event_count"]:
                 raise ValueError("Replay position must be between 1 and the final event sequence")
             events = self.store.events(conn, run_id, through=through)
         state = None
         for event in events:
             state = reduce_event(state, event)
-        return public_view(state)
+        return account_view(state, viewer)
 
-    def export(self, run_id: str) -> dict:
+    def export(self, run_id: str, viewer: dict | None = None) -> dict:
         with self.store.reader() as conn:
             state = self.store.state(conn, run_id)
+            require_access(state, viewer)
             if state["status"] != "settled":
                 raise ValueError("Full audit export is available after settlement")
             return {
-                "schema_version": 1,
-                "run": public_view(state),
-                "events": self.store.events(conn, run_id),
+                "schema_version": 2,
+                "run": account_view(state, viewer),
+                "events": [
+                    account_event(e, state, viewer) if viewer is not None else e
+                    for e in self.store.events(conn, run_id)
+                ],
             }

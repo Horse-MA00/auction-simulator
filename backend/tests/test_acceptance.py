@@ -9,9 +9,20 @@ from fastapi.testclient import TestClient
 from backend.auction_sim.main import create_app
 
 
+def login_admin(client, *, create=True):
+    if create:
+        client.app.state.auth.create_admin("test-admin", "Correct-Horse-42!")
+    response = client.post(
+        "/api/auth/login", json={"username": "test-admin", "password": "Correct-Horse-42!"}
+    )
+    assert response.status_code == 200, response.text
+    client.headers["X-CSRF-Token"] = response.json()["csrf_token"]
+
+
 @pytest.fixture
 def client(tmp_path):
     with TestClient(create_app(db_path=tmp_path / "auctions.sqlite3")) as active:
+        login_admin(active)
         yield active
 
 
@@ -135,16 +146,17 @@ def test_zero_bid_can_win_with_zero_reserve_under_documented_floor_policy(client
     assert outcomes(completed)["alpha"]["utility"] == 1
 
 
-def test_steps_wait_for_all_bidders_and_hide_sealed_bids(client):
+def test_steps_wait_for_all_bidders_and_admin_can_audit_collected_bids(client):
     run = create_run(client)
     states = [run["status"]]
+    bid_order = [("alpha", 80), ("bravo", 96), ("charlie", 72)]
     for expected_responses in (0, 1, 2, 3, 3):
         response = client.post(f"/api/runs/{run['id']}/advance")
         assert response.status_code == 200, response.text
         view = response.json()
         states.append(view["status"])
         assert len(view["responded"]) == expected_responses
-        assert view["bids"] is None
+        assert view["bids"] == dict(bid_order[:expected_responses])
         assert view["results"] is None
     assert states == ["created", "collecting", "collecting", "collecting", "collecting", "closed"]
     final = client.post(f"/api/runs/{run['id']}/advance").json()
@@ -154,21 +166,22 @@ def test_steps_wait_for_all_bidders_and_hide_sealed_bids(client):
     assert len(bid_events) == 3
     for event in bid_events:
         assert event["visibility"] == "private"
-        assert event["payload"].get("redacted") is True
-        assert "bid" not in event["payload"]
-        assert "amount" not in event["payload"]
+        assert event["payload"]["amount"] == dict(bid_order)[event["actor"]]
 
 
 def test_event_cursor_and_replay_never_show_future_results(client):
     completed = execute(client, create_run(client)["id"])
     events = client.get(f"/api/runs/{completed['id']}/events").json()["events"]
     assert [event["seq"] for event in events] == list(range(1, len(events) + 1))
+    seen_bids = {}
     for event in events[:-1]:
+        if event["type"] == "bid_submitted":
+            seen_bids[event["actor"]] = event["payload"]["amount"]
         replay = client.get(f"/api/runs/{completed['id']}/replay", params={"through": event["seq"]})
         assert replay.status_code == 200, replay.text
         view = replay.json()
         assert view["event_count"] == event["seq"]
-        assert view["bids"] is None
+        assert view["bids"] == seen_bids
         assert view["results"] is None
     replay_final = client.get(
         f"/api/runs/{completed['id']}/replay", params={"through": events[-1]["seq"]}
@@ -195,9 +208,11 @@ def test_completed_run_is_idempotent(client):
 def test_runs_and_events_survive_application_restart(tmp_path):
     database = tmp_path / "persist.sqlite3"
     with TestClient(create_app(db_path=database)) as first:
+        login_admin(first)
         completed = execute(first, create_run(first)["id"])
         events = first.get(f"/api/runs/{completed['id']}/events").json()
     with TestClient(create_app(db_path=database)) as second:
+        login_admin(second, create=False)
         assert second.get(f"/api/runs/{completed['id']}").json() == completed
         assert second.get(f"/api/runs/{completed['id']}/events").json() == events
         listed = second.get("/api/runs").json()["runs"]
@@ -207,12 +222,14 @@ def test_runs_and_events_survive_application_restart(tmp_path):
 def test_partially_collected_run_resumes_after_restart(tmp_path):
     database = tmp_path / "partial.sqlite3"
     with TestClient(create_app(db_path=database)) as first:
+        login_admin(first)
         run = create_run(first)
         first.post(f"/api/runs/{run['id']}/advance")
         partial = first.post(f"/api/runs/{run['id']}/advance").json()
         assert partial["status"] == "collecting"
         assert partial["responded"] == ["alpha"]
     with TestClient(create_app(db_path=database)) as second:
+        login_admin(second, create=False)
         completed = execute(second, run["id"])
         assert completed["results"]["winner_id"] == "bravo"
         events = second.get(f"/api/runs/{run['id']}/events").json()["events"]
@@ -227,7 +244,7 @@ def test_full_audit_export_is_available_only_after_settlement(client):
     assert response.status_code == 200
     assert "attachment" in response.headers["content-disposition"]
     exported = response.json()
-    assert exported["schema_version"] == 1
+    assert exported["schema_version"] == 2
     assert exported["run"] == completed
     sealed = [event for event in exported["events"] if event["type"] == "bid_submitted"]
     assert [event["payload"]["amount"] for event in sealed] == [80, 96, 72]
@@ -251,8 +268,7 @@ def test_websocket_recovers_events_from_cursor_and_delivers_new_steps(client):
         assert recovered["events"][-1]["type"] == "auction_settled"
         for event in recovered["events"]:
             if event["type"] == "bid_submitted":
-                assert event["payload"]["redacted"] is True
-                assert "amount" not in event["payload"]
+                assert event["payload"]["amount"] in (80, 96, 72)
 
 
 @pytest.mark.parametrize(
