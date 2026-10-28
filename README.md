@@ -171,7 +171,7 @@ docker compose -f compose.postgres.yaml exec simulator python -m backend.auction
 | `AUCTION_DB_PATH` | `data/auction.sqlite3`，沒有 database URL 時使用 |
 | `AUCTION_FRONTEND_DIR` | `frontend/dist`，已 build 的 frontend 位置 |
 | `AUCTION_COOKIE_SECURE` | 本機 HTTP 預設 `false`；HTTPS 部署設為 `true` |
-| `AUCTION_ALLOWED_ORIGINS` | 逗號分隔的完整 origin；預設允許 `localhost`／`127.0.0.1` 的 8000、5173 ports |
+| `AUCTION_ALLOWED_ORIGINS` | 逗號分隔的完整 origin；本機預設允許 `localhost`／`127.0.0.1` 的 8000、5173 ports。Render 部署會自動加入 `RENDER_EXTERNAL_URL`，自訂域名在此另外設定 |
 | `POSTGRES_PASSWORD` | PostgreSQL Compose 必填；本機直接啟動 backend 不使用此變數 |
 
 `.env.example` 提供參考值。Docker Compose 會讀 `.env` 進行設定替換；直接啟動的 backend 只讀取 process environment，不會自行載入 `.env`。前後端採同一 origin／Vite proxy，不需要開放 CORS。若透過 HTTPS host 部署，需將該完整 origin 加入允許清單並啟用 Secure cookie。

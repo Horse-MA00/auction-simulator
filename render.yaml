@@ -19,11 +19,8 @@ services:
         value: /app/frontend/dist
       - key: AUCTION_COOKIE_SECURE
         value: "true"
-      - key: AUCTION_ALLOWED_ORIGINS
-        fromService:
-          type: web
-          name: han2601-auction
-          envVarKey: RENDER_EXTERNAL_URL
+      # The app reads Render's own RENDER_EXTERNAL_URL at runtime.
+      # Set AUCTION_ALLOWED_ORIGINS separately only for additional custom domains.
       - key: AUCTION_DATABASE_URL
         fromDatabase:
           name: han2601-postgres

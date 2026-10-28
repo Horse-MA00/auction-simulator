@@ -49,15 +49,24 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     receiver = Receiver(store)
     auth = AuthService(store)
     secure_cookie = os.environ.get("AUCTION_COOKIE_SECURE", "false").lower() in {"1", "true"}
+    # Read the platform's current URL at startup, rather than relying on a Blueprint
+    # self-reference copied on a previous sync. Never derive trust from request headers.
+    render_origin = os.environ.get("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
+    default_origins = (
+        ""
+        if render_origin
+        else (
+            "http://127.0.0.1:8000,http://localhost:8000,"
+            "http://127.0.0.1:5173,http://localhost:5173"
+        )
+    )
     allowed_origins = {
         origin.strip().rstrip("/")
-        for origin in os.environ.get(
-            "AUCTION_ALLOWED_ORIGINS",
-            "http://127.0.0.1:8000,http://localhost:8000,"
-            "http://127.0.0.1:5173,http://localhost:5173",
-        ).split(",")
+        for origin in os.environ.get("AUCTION_ALLOWED_ORIGINS", default_origins).split(",")
         if origin.strip()
     }
+    if render_origin:
+        allowed_origins.add(render_origin)
 
     @asynccontextmanager
     async def lifespan(app):

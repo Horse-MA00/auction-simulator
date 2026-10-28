@@ -61,7 +61,7 @@ There are three separate boundaries:
 
 Event payloads are projected by an explicit allowlist. Rejected raw messages are redacted for ordinary users even if the actor is theirs, because their payloads may contain arbitrary data. Replay reconstructs an event prefix before projection so a later settlement does not leak into an earlier state. Exports require a settled run and retain the caller's access restrictions. WebSocket authentication is checked again during streaming so logout or expiry closes the connection.
 
-Authenticated HTTP mutations require a session-specific `X-CSRF-Token`; registration and login require JSON and validate any supplied Origin. The configured Origin allowlist also applies to WebSockets. Frontend and API use a shared origin or the Vite development proxy, without permissive CORS. The default deployment binds to loopback. HTTPS deployments should set `AUCTION_COOKIE_SECURE=true` and configure their exact browser origin.
+Authenticated HTTP mutations require a session-specific `X-CSRF-Token`; registration and login require JSON and validate any supplied Origin. The configured Origin allowlist also applies to WebSockets. On Render, the service's platform-provided `RENDER_EXTERNAL_URL` is included at startup; custom domains require explicit configuration. Trust is never derived from request Host or forwarded headers. Frontend and API use a shared origin or the Vite development proxy, without permissive CORS. The default local deployment binds to loopback. HTTPS deployments should set `AUCTION_COOKIE_SECURE=true`.
 
 ## Boundaries for later work
 

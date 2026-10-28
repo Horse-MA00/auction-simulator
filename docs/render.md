@@ -25,7 +25,8 @@ Render 會先建立 PostgreSQL，然後按 Dockerfile build 並啟動網站。�
 | --- | --- |
 | `AUCTION_DATABASE_URL` | 自動引用 PostgreSQL 的 Internal Database URL |
 | `AUCTION_COOKIE_SECURE=true` | 登入 cookie 只經 HTTPS 傳送 |
-| `AUCTION_ALLOWED_ORIGINS` | 自動引用此 Web Service 的 `RENDER_EXTERNAL_URL` |
+| `RENDER_EXTERNAL_URL` | Render 自動提供，程式啟動時將它加入允許來源 |
+| `AUCTION_ALLOWED_ORIGINS` | 可選；另外加入自訂域名的完整 HTTPS origin |
 | `AUCTION_FRONTEND_DIR=/app/frontend/dist` | 使用 Docker build 好的 frontend |
 | `PORT=8000` | 配合現有 Dockerfile 的監聽 port |
 
@@ -57,11 +58,11 @@ python -m backend.auction_sim.admin promote YOUR_USERNAME
 - 註冊一個普通帳戶，再用 admin 建立並指派 bidder；切回普通帳戶確認只能看到自己的出價。
 - 重新部署後確認帳戶和拍賣仍存在。
 - 後續將程式 push 到 `auction-simulator-v0`，由 Render 的 auto-deploy 設定決定是否自動部署；也可在 Dashboard 使用 Manual Deploy。
-- 想用自訂域名時，先在 Render Settings → Custom Domains 完成 DNS 和 TLS 設定，再把新 origin 加入 `AUCTION_ALLOWED_ORIGINS`。修改 Blueprint 中此變數的來源，改為明確列出逗號分隔的實際 HTTPS origins，避免下一次 Blueprint sync 覆蓋手動設定。
+- 想用自訂域名時，先在 Render Settings → Custom Domains 完成 DNS 和 TLS 設定，再把新 origin 加入 `AUCTION_ALLOWED_ORIGINS`，多個 origin 用逗號分隔。Render 自己的網址會自動保留在允許清單中。若舊 Blueprint 曾替此變數設定 self-reference，請將它改成自訂域名的明確值。
 
 ## 常見問題
 
-**登入出現 `Request origin is not allowed`：** 在 Web Service 的 Environment 確認 `AUCTION_ALLOWED_ORIGINS` 等於你瀏覽器網址的 `https://主機名稱`，不要包含路徑或結尾斜線。若改過服務名稱或域名，重新同步 Blueprint 並檢查此值。
+**登入出現 `Request origin is not allowed`：** 新版程式會自動讀取 Render 的 `RENDER_EXTERNAL_URL`。先確認已部署 GitHub 最新 commit；若用自訂域名，將瀏覽器的 `https://主機名稱` 加入 `AUCTION_ALLOWED_ORIGINS`，不要包含路徑或結尾斜線，再重新部署。舊版本也可暫時用此變數明確設定實際的 `onrender.com` 網址。只允許此服務的精確網址，不允許所有 `*.onrender.com`。
 
 **Build 找不到 Dockerfile：** 確認使用 `auction-simulator-v0` branch、repository 根目錄，以及 `./Dockerfile`，不要選 frontend 子目錄。
 

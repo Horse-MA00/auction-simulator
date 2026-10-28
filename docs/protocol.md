@@ -14,7 +14,7 @@ All paths below are relative to `/api`. Except for health, registration and logi
 
 Registration and login return `{"user":{"id":"…","username":"…","role":"user"},"csrf_token":"…"}`. The role may be `admin` when an administrator signs in, but a registration request cannot select a role. Usernames contain 3–32 ASCII letters, digits, underscores or hyphens and are normalized to lowercase. New passwords must have 5–20 characters; their leading and trailing spaces are significant. Login still accepts existing passwords created under the previous policy.
 
-After login, send `X-CSRF-Token` with every authenticated POST. Use `/auth/me` to retrieve the token again after a page reload. Browser requests use `credentials: "include"`; the frontend keeps the CSRF token in memory. Login/registration must have `Content-Type: application/json`. Supplied Origin headers must exactly match `AUCTION_ALLOWED_ORIGINS`; WebSocket upgrades use the same allowlist. There is no cross-origin CORS grant.
+After login, send `X-CSRF-Token` with every authenticated POST. Use `/auth/me` to retrieve the token again after a page reload. The frontend sends same-origin cookies and keeps the CSRF token in memory. Login/registration must have `Content-Type: application/json`. Supplied Origin headers must exactly match the allowlist: configured `AUCTION_ALLOWED_ORIGINS` plus the platform-provided `RENDER_EXTERNAL_URL`, if present. WebSocket upgrades use the same allowlist. Request Host/forwarded headers do not grant trust, and there is no cross-origin CORS grant.
 
 Example authenticated sequence, using the cookie jar provided by an HTTP client:
 
