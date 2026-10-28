@@ -133,6 +133,10 @@ npm --prefix frontend run build
 
 測試涵蓋結算、底價、同價、預算、訊息驗證、重播、持久化、登入／登出、CSRF 及資料存取隔離。GitHub Actions 設定了 SQLite tests、PostgreSQL integration tests、frontend tests 和 frontend production build。PostgreSQL 測試需要 `AUCTION_TEST_DATABASE_URL`；未設定時會跳過，見 [資料庫說明](docs/database.md)。
 
+## Render 雲端部署
+
+Repository 已包含 `render.yaml`，可從 Render 的 **New → Blueprint** 選擇 `auction-simulator-v0` branch，一次建立前後端 Docker service 和 PostgreSQL。此配置為付費入門方案，約 US$13/月起；建立前請確認 Render 顯示的費用。完整步驟及雲端 admin 建立方法見 [Render 部署說明](docs/render.md)。
+
 ## Docker
 
 需要啟動 Docker Desktop 或 Docker Engine：
