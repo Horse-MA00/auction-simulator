@@ -1,0 +1,14 @@
+services:
+  simulator:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      AUCTION_DB_PATH: /app/data/auction.sqlite3
+      AUCTION_FRONTEND_DIR: /app/frontend/dist
+    volumes:
+      - auction-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  auction-data:

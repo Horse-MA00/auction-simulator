@@ -1,0 +1,87 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+% Times-compatible text and mathematics that compile with pdfLaTeX.
+\usepackage{newtxtext}
+\usepackage{newtxmath}
+\usepackage{microtype}
+\usepackage[round]{natbib}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.25em}
+\titlespacing*{\section}{0pt}{0.75em}{0.20em}
+\titlespacing*{\subsection}{0pt}{0.55em}{0.15em}
+\titleformat{\section}{\large\bfseries}{\thesection}{0.55em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.55em}{}
+\setlength{\abovecaptionskip}{3pt}
+\setlength{\belowcaptionskip}{0pt}
+
+\begin{document}
+
+\begin{center}
+  {\fontsize{14}{16}\selectfont\bfseries
+  Planning Report for a Generic Auction Simulator\par}
+  \vspace{2pt}
+  {\normalsize LIU Xianlong \quad MA Ho Tsun Matthew\par}
+  \vspace{1pt}
+  {\small Project Code: HAN2601 \quad
+  Supervisor: Prof. ZHANG Hanrui \quad
+  30 September 2026\par}
+\end{center}
+\vspace{-0.6em}
+
+\section{Project Goal}
+This project proposes a web-based auction simulator in which an auctioneer and multiple bidders communicate through a common message protocol and central receiver. The backend will separate agent strategies from message coordination and deterministic auction rules, allowing programmed and large language model (LLM) agents to use the same interface. Version 0 will deliberately use only a fixed scripted auctioneer and scripted bidders to verify synchronous execution, allocation, payments, and bidder surplus. Later versions will introduce configurable strategies, additional auction mechanisms, and LLM agents.
+
+\subsection{Significance of the Project}
+The project provides a reusable environment for running and observing auctions under controlled rules and valuations. Students and researchers can use it to compare bidding strategies, inspect complete auction histories and later evaluate LLM agents under the same conditions as programmed baselines. Combining communication, auction logic and strategy in one implementation can make failures difficult to isolate and results difficult to reproduce. A common receiver and message format will separate these concerns and create a reliable baseline for later intelligent agents.
+
+\section{Related Work}
+The theoretical basis for sealed-bid auction mechanisms includes Vickrey's analysis of competitive tenders and second-price auctions \citep{vickrey1961counterspeculation}. More recent work uses auctions as controlled environments for studying LLM agents. AucArena evaluates planning, execution, and adaptation in dynamic auctions \citep{chen2024auction}, while Synthetic Labs compares LLM behaviour across several classic auction formats \citep{shah2025syntheticlabs}. InfoBid focuses more narrowly on information disclosure in second-price auctions with LLM bidders \citep{yin2025infobid}. These studies demonstrate the value of auction simulation, while this project focuses on a reusable receiver, deterministic rule enforcement, and a scripted baseline that can later support LLM agents.
+
+\section{Problem Statement}
+An auction involves messages from both the auctioneer and bidders, but those messages must be processed in the correct session, round and order. Without mechanism-aware coordination, conflicting actions may be processed incorrectly, an out-of-date bid may be accepted, or one agent may see information that should remain private. The backend must therefore receive every message, verify its sender and context, route it to the correct participant, and synchronize the next action. It must also keep the auction state and event history consistent if an agent sends an invalid message or fails to respond.
+
+\section{Proposed Solutions and Deliverables}
+\paragraph{Backend foundation.} A central receiver will process messages from the auctioneer and bidders, verify the session and round, synchronize each action, and route permitted information. A deterministic auction service will validate bids, maintain the auction state, and calculate winners and payments. The backend will also record an event history for debugging and replay and expose the current state through a simple web interface.
+
+\paragraph{Version 0.} The first version will use only a scripted auctioneer and scripted bidders. Each bidder will follow one fixed first-bid rule and submit $0.8v$, where $v$ is its assigned valuation. This baseline will verify the complete message flow, auction rules, settlement, and bidder surplus before more complex behaviour is introduced.
+
+\paragraph{Later versions.} After Version 0 is stable, the simulator will introduce additional programmed strategies with different levels of risk, responsiveness, and use of auction history. These strategies will provide stronger baselines for comparison. LLM agents will then be connected through an adapter that converts receiver observations into prompts and model outputs into the same structured bid messages. The receiver and auction service will therefore remain unchanged as new strategies are added.
+
+\paragraph{Technology stack.} The proposed backend will use Python with FastAPI for the REST interface, WebSockets for live auction messages, and Pydantic for validating message and configuration schemas. SQLite will support the Version 0 prototype, with PostgreSQL available if later experiments require concurrent or larger-scale storage. The web interface will use React and TypeScript, while pytest will cover auction rules, message ordering, and settlement. Git and GitHub will support version control, Docker will provide a reproducible deployment environment, and future LLM agents will connect through provider APIs behind the common adapter.
+
+\section{Proposed Timeline}
+The first priority is a complete scripted pipeline; LLM integration remains conditional on baseline stability.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{0.20\textwidth} >{\raggedright\arraybackslash}p{0.22\textwidth} X}
+\toprule
+\textbf{Period} & \textbf{Work package} & \textbf{Expected output} \\
+\midrule
+24 Sep--11 Oct 2026 & Protocol and architecture & Message schema, receiver interfaces, session states, and test plan \\
+12 Oct--8 Nov 2026 & Version 0 vertical slice & Fixed auctioneer, $0.8v$ first-bid strategy, synchronous receiver, and one complete auction \\
+9 Nov--6 Dec 2026 & Auction rules & Sealed-bid mechanisms, validation, settlement, and invariant tests \\
+7 Dec 2026--17 Jan 2027 & Strategy extensions & Additional programmed strategies, repeatable scenarios, and profit metrics \\
+18 Jan--21 Feb 2027 & Dynamic auctions and storage & English, Dutch, and Japanese flows, event log, replay, and export \\
+22 Feb--31 Mar 2027 & Demonstration and testing & REST/WebSocket API, live view, failure tests, and documentation \\
+1 Apr 2027--final deadline & Evaluation and submission & Comparative experiments, final report, and optional LLM adapter if the baseline is stable \\
+\bottomrule
+\end{tabularx}
+\caption{Proposed development schedule.}
+\end{table}
+
+\section{Conclusion}
+The proposed simulator will separate agent strategies, communication, and auction rules through a common protocol and central receiver. The scripted first release will establish correctness and replayability before broader strategy experiments and optional LLM integration.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+\end{document}

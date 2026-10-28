@@ -1,0 +1,88 @@
+\documentclass[11pt]{article}
+% Official ACL/EMNLP style; preprint retains authors and page numbers.
+% For an anonymous conference submission, change preprint to review.
+\usepackage[preprint]{acl}
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{amsmath}
+\title{A Generic Auction Simulator for Programmed and LLM-Based Agents\\
+\large Project Planning Report}
+\author{LIU Xianlong \quad MA Ho Tsun Matthew \\
+Project Code: HAN2601 \\
+Supervisor: Prof. ZHANG Hanrui \\
+30 September 2026}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This project proposes a web-based auction simulator for programmed and large language model (LLM) agents. A common message protocol and central receiver will separate agent strategies from message coordination and deterministic auction rules. The initial version will use scripted agents to verify synchronous execution, allocation, payments, and bidder surplus. Subsequent stages will introduce configurable strategies, additional auction mechanisms, and replayable experiments. This report presents the proposed architecture, evaluation plan, and development schedule; it does not report completed experiments.
+\end{abstract}
+
+\section{Introduction}
+The project will develop a web-based auction simulator in which an auctioneer and multiple bidders communicate through a common message protocol. The complete platform is intended to support both programmed agents and large language model agents. The first version will deliberately use only a fixed scripted auctioneer and scripted bidders. This narrower scope will allow the team to verify message delivery, synchronous turn handling, auction rules, allocation, payment and profit calculation before adding the uncertainty and cost of LLM calls.
+
+\subsection{Motivation and Intended Users}
+The project provides a reusable environment for running and observing auctions under controlled rules and valuations. Students and researchers can use it to compare bidding strategies, inspect complete auction histories and later evaluate LLM agents under the same conditions as programmed baselines. Combining communication, auction logic and strategy in one implementation can make failures difficult to isolate and results difficult to reproduce. A common receiver and message format will separate these concerns and create a reliable baseline for later intelligent agents.
+
+\section{Related Work}
+\citet{chen2024auction} introduce AucArena to evaluate strategic planning and execution by LLM agents in auctions. Their work motivates interactive evaluation under explicit rules. This project focuses on the supporting infrastructure: message coordination, deterministic settlement, and reproducible histories. Scripted agents will establish a baseline before LLM integration.
+
+\section{Problem Statement}
+An auction involves messages from both the auctioneer and bidders, but those messages must be processed in the correct session, round and order. Without mechanism-aware coordination, conflicting actions may be processed incorrectly, an out-of-date bid may be accepted, or one agent may see information that should remain private. The backend must therefore receive every message, verify its sender and context, route it to the correct participant, and synchronize the next action. It must also keep the auction state and event history consistent if an agent sends an invalid message or fails to respond.
+
+\section{Proposed System}
+\subsection{Components and Deliverables}
+\paragraph{Receiver and synchronizer.} A central backend component will accept messages from the auctioneer and bidders, validate their envelopes, control the current turn or round, route permitted information and handle response deadlines.
+\paragraph{Common message protocol.} Messages will contain a session identifier, sender, recipient or audience, message type, round number and structured payload. The same protocol can later carry LLM-generated actions.
+\paragraph{Deterministic auction service.} Coded rules will maintain session state, decide whether an action is legal, calculate winners and payments, and remain the source of truth for each result.
+\paragraph{Event log and demonstration.} Every accepted and rejected message will be recorded for replay, debugging and performance measurement. A simple interface will show the current state, messages, bids and final result.
+
+\subsection{Versioned Strategy Plan}
+\paragraph{Version 0: first-bid baseline.} Version 0 will use only a scripted auctioneer and scripted bidders. Each bidder will follow one fixed first-bid rule: it submits $0.8v$, where $v$ is its assigned valuation or reference price. This simple and deterministic strategy is intended to test the complete backend path rather than strategic intelligence. It will allow the team to verify that the receiver accepts and orders messages correctly, the auction service applies the rules, and the system calculates the winner, payment and bidder surplus consistently.
+
+\paragraph{Later programmed strategies.} After Version 0 is stable, later versions will add alternative programmed strategies without changing the receiver or message protocol. The first extension will make the bid multiplier configurable in $[0.8,1.2]$. Further strategies may react to the auction mechanism, current price, remaining budget and earlier bids. These additions will support controlled comparisons against the Version 0 baseline.
+
+\paragraph{LLM integration.} LLM agents will be introduced only after the programmed strategies and deterministic auction service have passed their correctness tests. An LLM adapter will translate receiver observations into prompts and convert structured model output into the same bid messages used by scripted agents. This staged approach keeps LLM uncertainty, response time and API cost outside the Version 0 acceptance criteria while preserving a direct path to the full project goal.
+
+\subsection{Backend Workflow}
+The receiver is the communication boundary for the whole simulation. An agent never changes the auction state directly. It sends an action message to the receiver, which checks the session and round, asks the deterministic rule engine to validate and apply the action, records the outcome, and then releases the next permitted message. This design provides synchronous behaviour even if the internal components later use asynchronous network calls.
+
+\textbf{Suggested implementation.} The first release can be a modular Python backend with a REST API and a WebSocket event stream. The receiver, auction rules, scripted strategies and event store should be separate modules inside one deployable application. SQLite is sufficient for the prototype; a larger database or worker queue should be added only if experiment volume requires it.
+
+\section{Evaluation Plan}
+\textbf{First-version success criteria.} A complete scripted auction can run without manual intervention; messages are processed in a valid synchronous order; invalid or late actions cannot corrupt the session; the winner, payment and profit are correct; and the event log can reproduce the observed result.
+
+\paragraph{Correctness and robustness.}
+Planned tests will cover session and round validation, unauthorized observations, invalid bids, missed deadlines, and mechanism-specific settlement. Hand-calculated examples will check allocation and payments. Turn ordering will follow the selected mechanism: sealed-bid rounds collect eligible submissions before settlement, while turn-based mechanisms release actions in sequence. Tie-breaking and timeout policies will be specified for each mechanism.
+
+\paragraph{Strategy comparison.}
+Experiments will compare bidding multipliers using matched valuations and auction configurations. For a single-item setting, bidder surplus will be computed as
+\begin{equation}
+ u_i = x_i v_i - p_i,
+\end{equation}
+where $x_i\in\{0,1\}$ denotes allocation, $v_i$ is the bidder's valuation, and $p_i$ is the mechanism-determined payment. Planned metrics include surplus, win rate, auctioneer revenue, completion rate, and rejected-action counts. Configurations and random seeds, where applicable, will be stored to support repeatability. Replay must reproduce the observed allocation and payments.
+
+\section{Development Schedule}
+The first priority is a complete scripted pipeline; LLM integration remains conditional on baseline stability.
+
+\begin{itemize}
+  \item \textbf{24 September--11 October 2026: Protocol and architecture.} Define the message schema, receiver interfaces, session states and automated test plan.
+  \item \textbf{12 October--8 November 2026: Version 0 vertical slice.} Implement the fixed auctioneer, the $0.8v$ first-bid strategy, the synchronous receiver and one complete auction flow.
+  \item \textbf{9 November--6 December 2026: Auction rules.} Implement the required sealed-bid mechanisms, validation, settlement and invariant tests.
+  \item \textbf{7 December 2026--17 January 2027: Programmed strategy extensions.} Add the configurable multiplier in $[0.8,1.2]$, repeatable scenarios and profit metrics.
+  \item \textbf{18 January--21 February 2027: Dynamic auctions and storage.} Implement English, Dutch and Japanese flows, event logging, replay and export.
+  \item \textbf{22 February--31 March 2027: Demonstration and testing.} Complete the REST/WebSocket API, live view, failure tests and documentation.
+  \item \textbf{1 April 2027--final deadline: Evaluation and submission.} Run comparative experiments, complete the analysis and final report, and add an LLM adapter only if the programmed baseline is stable.
+\end{itemize}
+
+\section{Conclusion}
+The proposed simulator will separate agent strategies, communication, and auction rules through a common protocol and central receiver. The scripted first release will establish correctness and replayability before broader strategy experiments and optional LLM integration.
+
+\section*{Limitations}
+This report describes planned work rather than a completed empirical study. Fixed-multiplier bidding is a simple baseline, not an optimal strategy. Mechanism-specific policies and experiment configurations remain to be finalized. LLM evaluation is outside the first-version acceptance criteria, and simulated outcomes alone do not establish performance in real markets.
+
+\bibliography{references}
+\end{document}
